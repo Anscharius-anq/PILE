@@ -1,6 +1,24 @@
+"""
+Tarea 1: Extracción de proteínas candidatas a partir de una secuencia de ADN en una URL
+
+El script "Tarea_1.py" implementa un flujo secuencial para obtener proteínas candidatas 
+a partir de una secuencia de ADN alojada en una URL. 
+
+Nota: Aunque existen bibliotecas especializadas como Biopython que realizan este proceso
+mucho más eficiente, este desarrollo se realiza con fines didacticos.
+
+para un futuro, instalar biopython:
+        $ python -m pip install biopython
+
+    Documentación:
+        https://biopython.org/wiki/Documentation
+"""
+
 import requests
 import sys
 import re
+
+
 
 CODON_TAB = {
     "GUU": "V", "GUC": "V", "GUA": "V", "GUG": "V", "GCU": "A", "GCC": "A", "GCA": "A", "GCG": "A",
@@ -14,6 +32,7 @@ CODON_TAB = {
 }
 
 def url_content(url: str) -> str:
+    # si requests no es suficiente usar trafilatura
     try:
         response = requests.get(url, timeout=10)  
         response.raise_for_status()               
@@ -82,7 +101,7 @@ def translation(mrna: str, min_length: int = 2) -> list:
 
     return proteins
 
-# su unico uso es para formatear la salida de las proteinas encontradas
+# su unico uso es para formatear la salida de las proteinas
 def format_proteins(proteins: list, top: int = None, sort: bool = False) -> str:
     if sort:
         proteins = sorted(proteins, key=lambda p: p["longitud"], reverse=True)
@@ -99,6 +118,53 @@ def format_proteins(proteins: list, top: int = None, sort: bool = False) -> str:
         )
 
     return "\n".join(result)
+
+
+
+
+def get_proteins_from_url(url: str, top: int = None, sort: bool = False) -> list:
+    """
+    Obtiene proteínas candidatas a partir de una secuencia de ADN en una URL.
+
+    Ejecuta el flujo completo: descarga el contenido, extrae la secuencia de ADN,
+    la transcribe a mRNA y la traduce a proteínas candidatas.
+
+    Args:
+        url (str): URL del archivo de texto que contiene la secuencia de ADN.
+        top (int, optional): Límite de proteínas a retornar. Si es None, retorna todas.
+        sort (bool, optional): Si es True, ordena las proteínas de mayor a menor longitud.
+                               Por defecto es False.
+
+    Returns:
+        list[dict]: Lista de proteínas encontradas. Cada proteína es un diccionario con:
+            - secuencia (str): Cadena de aminoácidos en código de una letra.
+            - inicio (int):    Índice del codón AUG en el mRNA.
+            - termino (int):   Índice del codón de término en el mRNA.
+            - longitud (int):  Número de aminoácidos de la proteína.
+
+    Raises:
+        RuntimeError: Si no se puede conectar al servidor o la respuesta HTTP es un error.
+        ValueError:   Si no se encuentra una secuencia de ADN válida en el contenido.
+
+    Example:
+        >>> proteins = get_proteins_from_url("https://ejemplo.com/gen.txt", top=3, sort=True)
+        >>> for p in proteins:
+        ...     print(p["longitud"], p["secuencia"])
+    """
+    content = url_content(url)
+    dna = get_dna(content)
+    mrna = transcription(dna)
+    proteins = translation(mrna)
+
+    if sort:
+        proteins = sorted(proteins, key=lambda p: p["longitud"], reverse=True)
+    if top:
+        proteins = proteins[:top]
+
+    return proteins
+
+
+
 
 def main():
     
