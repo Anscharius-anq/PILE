@@ -1,2 +1,6 @@
-#variable de entorno
-.venv
+# Entorno virtual 
+.venv/
+
+# Archivos de caché y código compilado
+__pycache__/
+*.pyc
