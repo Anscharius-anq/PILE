@@ -18,8 +18,6 @@ import requests
 import sys
 import re
 
-
-
 CODON_TAB = {
     "GUU": "V", "GUC": "V", "GUA": "V", "GUG": "V", "GCU": "A", "GCC": "A", "GCA": "A", "GCG": "A",
     "GAU": "D", "GAC": "D", "GAA": "E", "GAG": "E", "GGU": "G", "GGC": "G", "GGA": "G", "GGG": "G",
@@ -120,8 +118,6 @@ def format_proteins(proteins: list, top: int = None, sort: bool = False) -> str:
     return "\n".join(result)
 
 
-
-
 def get_proteins_from_url(url: str, top: int = None, sort: bool = False) -> list:
     """
     Obtiene proteínas candidatas a partir de una secuencia de ADN en una URL.
@@ -162,8 +158,6 @@ def get_proteins_from_url(url: str, top: int = None, sort: bool = False) -> list
         proteins = proteins[:top]
 
     return proteins
-
-
 
 
 def main():
