@@ -13,80 +13,109 @@ CODON_TAB = {
     "UGU": "C", "UGC": "C", "UGA": "*", "UGG": "W", "CUU": "L", "CUC": "L", "CUA": "L", "CUG": "L"
 }
 
-def url_content(url):
+def url_content(url: str) -> str:
     try:
-        response = requests.get(url)
-
-        if not response.ok:
-            print(f"ERROR: Status - {response.status_code}")
-            sys.exit()
-
+        response = requests.get(url, timeout=10)  
+        response.raise_for_status()               
         return response.text
-
+    except requests.exceptions.HTTPError as e:
+        raise RuntimeError(f"Error HTTP {e.response.status_code}: {url}") from e
     except requests.exceptions.RequestException as e:
-        print(f"ERROR: No se pudo establecer conexion con el servidor.")
-        sys.exit()
+        raise RuntimeError(f"No se pudo conectar con el servidor: {url}") from e
 
 
-def get_dna(text:str) -> str:
-    raw_matches = re.findall(r"[ATCG][ATCG\s]{10,}[ATCG]", text, re.IGNORECASE)
-    if not raw_matches:
-        return None
+def get_dna(text: str) -> str:
+    dna_lines = []
+    # se corta el texto en líneas a una lista y se procesa cada línea
+    for line in text.splitlines():
+        # se eliminan espacios y se convierten a mayúsculas
+        clean = re.sub(r"\s", "", line).upper()
+        # se extraen secuencias ATCG dentro de la línea
+        if clean and re.fullmatch(r"[ATCG]+", clean):
+            dna_lines.append(clean)
 
-    # el tercer argumento quita espacios y saltos de lineas
-    table = str.maketrans("", "", " \n\r\t")
-    clean_sequences = [sequence.translate(table).upper() for sequence in raw_matches]
+    if not dna_lines:
+        raise ValueError("No se encontró una secuencia de ADN válida en el texto.")
 
-    # devuelve el elemento mas largo en caso de que haya mas de uno ("ruido")
-    return max(clean_sequences, key=len)
+    return "".join(dna_lines)
 
 
-def transcription(dna):
+def transcription(dna: str) -> str:
     return dna.replace("T", "U")
 
 
-def translation(mrna):
-    start = mrna.find("AUG")
-    if start == -1:
-        return None
-    
-    codons = [
-    mrna[i:i+3]
-    for i in range(start, len(mrna), 3)
-    if len(mrna[i:i+3]) == 3 
-    ]
-    
-    prot = []
-    
-    for i in codons:
-        aa = CODON_TAB.get(i, "?")
-        
-        if aa == "*":
-            break
-        prot.append(aa)
-    return "".join(prot)
-    
+def translation(mrna: str, min_length: int = 2) -> list:
+    # se buscan todos los índices de inicio de codones AUG en el mRNA
+    start = [m.start() for m in re.finditer("AUG", mrna)]
+    if not start:
+        return []
+
+    proteins = []
+    # para cada índice de inicio, se traduce la secuencia hasta el codon de termino:
+    for i in start:
+        protein_seq = []
+        stop_index = None  
+        # Se itera cada  3 nucleotidos desde el inicio
+        for j in range(i, len(mrna) - 2, 3):
+            codon = mrna[j: j + 3]
+            amino_acid = CODON_TAB.get(codon, "?") # se marca ? si no es un codon valido
+            if amino_acid == "*": # indica codon de termino
+                stop_index = j
+                break
+            # se agrega el aminoacido a la secuencia de la proteina
+            protein_seq.append(amino_acid)
+        # si no se encontro un codon de termino, se ignora esta secuencia
+        if stop_index is None:  
+            continue
+        #
+        if len(protein_seq) >= min_length:
+            # se verifica que no haya una proteina contenido con el mismo codon de termino 
+            # antes de agregar la proteina a la lista de proteinas
+            is_nested = any(p["termino"] == stop_index for p in proteins) 
+            if not is_nested:
+                proteins.append({
+                    "secuencia": "".join(protein_seq),
+                    "inicio": i,
+                    "termino": stop_index,
+                    "longitud": len(protein_seq)
+                })
+
+    return proteins
+
+# su unico uso es para formatear la salida de las proteinas encontradas
+def format_proteins(proteins: list, top: int = None, sort: bool = False) -> str:
+    if sort:
+        proteins = sorted(proteins, key=lambda p: p["longitud"], reverse=True)
+    if top:
+        proteins = proteins[:top]
+
+    result = []
+    for protein in proteins:
+        result.append(
+            f"Inicio  : {protein['inicio']}\n"
+            f"Longitud: {protein['longitud']} aa\n"
+            f"Secuencia: {protein['secuencia']}\n"
+            f"{'-' * 60}"
+        )
+
+    return "\n".join(result)
 
 def main():
+    
     url = "https://raw.githubusercontent.com/Anscharius-anq/PILE/refs/heads/main/tarea_1.txt"
 
-    content = url_content(url)
-
-    dna = get_dna(content)
-    if  dna == None:
-        print("No se encontró una secuencia de ADN válida.")
-        return
+    try:
+        content = url_content(url)
+        dna = get_dna(content)
+    except (RuntimeError, ValueError) as e:
+        print(f"ERROR: {e}")
+        sys.exit(1)
 
     mrna = transcription(dna)
-    if mrna == None:
-        print("No se encontró secuencia de inicio (AUG)")
-        return
+    proteins = translation(mrna) 
 
-    protein = translation(mrna)
+    print(format_proteins(proteins, 3, sort=True))
 
-    print("DNA:", dna)
-    print("mRNA:", mrna)
-    print("Protein:", protein)
 
 if __name__ == "__main__":
     main()
