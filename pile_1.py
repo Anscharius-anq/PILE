@@ -22,10 +22,24 @@ CODON_TAB = {
     "TGT": "C", "TGC": "C", "TGA": "*", "TGG": "W", "CTT": "L", "CTC": "L", "CTA": "L", "CTG": "L"
 }
 
+URL = "https://raw.githubusercontent.com/Anscharius-anq/PILE/refs/heads/main/tarea_1.txt"
+
+MIN_RESIDUES = 30 # puedes ajustar este valor según lo que consideres un gen significativo
+
 
 def url_content(url: str) -> str:
+    """
+    Obtiene el contenido de una URL.
+
+    Args:
+        url (str): La URL de la que obtener el contenido.
+
+    Returns:
+        str: El contenido de la URL.
+    """
+    # se hace la solicitud HTTP y se maneja cualquier error que pueda ocurrir
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get(url)
         response.raise_for_status()
         return response.text
     except requests.exceptions.HTTPError as e:
@@ -39,48 +53,56 @@ def url_content(url: str) -> str:
 
 
 def get_dna(text: str) -> str:
+    '''
+    Extrae y devuelve la secuencia de ADN del texto dado en el argumento `text`. 
+    Si no se encuentra una secuencia de ADN válida, se lanza un error.
+    '''
     dna_lines = []
     # se corta el texto en líneas a una lista y se procesa cada línea
     for line in text.splitlines():
-        # se eliminan espacios y se convierten a mayúsculas
-        clean = re.sub(r"\s", "", line).upper()
-        # se extraen secuencias ATCG dentro de la línea
-        if clean and re.fullmatch(r"[ATCG]+", clean):
+        clean = re.sub(r"\s", "", line).upper() # se eliminan espacios y se convierten a mayúsculas
+        if clean and re.fullmatch(r"[ATCG]+", clean): # se extraen secuencias ATCG dentro de la línea
             dna_lines.append(clean)
 
     if not dna_lines:
-        raise ValueError(
-            "No se encontró una secuencia de ADN válida en el texto."
-        )
+        raise ValueError("No se encontró una secuencia de ADN válida en el texto.")
 
     return "".join(dna_lines)
 
 
-def dna_indices(dna: str) -> list:
+def dna_indices(dna: str, /, min_residues: int = MIN_RESIDUES) -> list:
+    '''
+    Devuelve una lista de tuplas `[(start, end), ...]` con los indices de inicio (ATG) y termino
+    (TAA, TAG o TGA) de cada gen encontrado en la secuencia de ADN dada en el argumento `dna`.
+
+    El argumento `min_residues` se utiliza para filtrar genes que tengan una longitud menor a ese número
+    de residuos. 
+
+    '''
+
     pattern = r"(?=(ATG(?:[ACGT]{3})*?T(?:GA|AA|AG)))"
-
-    matches = re.finditer(pattern, dna)
-
-    seen_stops = set()
-    genes = []
+    matches = re.finditer(pattern, dna) 
+    seen_stops = set() # evita genes solapados con el mismo codón de termino
+    genes = [] # lista de tuplas con indices de inicio y termino de cada gen encontrado
 
     for m in matches:
-        stop = m.end(1)
-
-        if stop in seen_stops:
+        start, stop = m.span(1) 
+        if stop in seen_stops: 
             continue
 
-        seen_stops.add(stop)
-        genes.append(m.span(1))
+        length_aa = ((stop - start) // 3 ) - 1
+        if length_aa >= min_residues:
+            seen_stops.add(stop) # marca el codon de termino ocupado
+            genes.append((start, stop))
 
     return genes
 
 
 def top_genes(genes, top: int = 3):
-    length = lambda x: x[1] - x[0]
-    largest_genes = sorted(genes, key=length, reverse=True)[:top]
+    length = lambda x: x[1] - x[0] # función para calcular la longitud de un gen a partir de sus indices
+    largest_genes = sorted(genes, key=length, reverse=True) # ordena los genes por longitud de mayor a menor
 
-    return largest_genes
+    return largest_genes[:top]
 
 
 def translation(dna: str, genes: list):
@@ -108,28 +130,9 @@ def translation(dna: str, genes: list):
     return proteins
 
 
-def display_proteins(proteins: list, total_genes: int):
-    print(
-        f"Se muestran {len(proteins)} de {total_genes} proteínas encontradas\n"
-    )
-
-    for i, p in enumerate(proteins, start=1):
-        print(
-            f"Proteína {i}:\n"
-            f"[{p.start}-{p.end - 3}] - "
-            f"{p.length} aminoácidos\n"
-            f"{p.sequence}\n"
-        )
-
-
-def get_proteins(dna, top, sort):
-    pass
-
-
 def main():
 
-    URL = "https://raw.githubusercontent.com/Anscharius-anq/PILE/refs/heads/main/tarea_1.txt"
-
+    
     try:
         content = url_content(URL)
         dna = get_dna(content)
@@ -139,7 +142,15 @@ def main():
     
     genes = dna_indices(dna)
     proteins = translation(dna, top_genes(genes))
-    display_proteins(proteins, len(genes))
+    
+    # se muestra un resumen de los genes encontrados y sus proteínas traducidas    
+    print(
+        f"Se muestran {len(proteins)} de {len(genes)} proteínas encontradas\n"
+    )
+
+    for i, p in enumerate(proteins, start=1):
+        print(f"Proteína {i} [pos:{p.start}]: {p.length} aa\n"
+              f"{p.sequence}\n")
 
 
 if __name__ == "__main__":
